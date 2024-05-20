@@ -1,0 +1,41 @@
+#!/bin/bash
+
+# List of ESXi hosts
+hosts=(
+    "host1.example.com"
+    "host2.example.com"
+    # Add more hosts as needed
+)
+
+# Email settings
+recipient="your_email@example.com"
+subject="CRC Errors Report"
+body=""
+errors_found=false
+
+# Function to check CRC errors on a host
+check_crc_errors() {
+    local host=$1
+    local nic_stats=$(ssh -o BatchMode=yes -o ConnectTimeout=5 $host 'esxcli network nic stats get')
+    
+    if [ $? -ne 0 ]; then
+        echo "Unable to connect to $host"
+        return
+    fi
+
+    local crc_errors=$(echo "$nic_stats" | grep -i "CRC" | awk '{print $NF}')
+    if [ ! -z "$crc_errors" ] && [ "$crc_errors" -gt 0 ]; then
+        body+="CRC errors for host $host:\n\n$nic_stats\n\n"
+        errors_found=true
+    fi
+}
+
+# Loop through each ESXi host and check CRC errors
+for host in "${hosts[@]}"; do
+    check_crc_errors $host
+done
+
+# Send email if any errors are found
+if [ "$errors_found" = true ]; then
+    echo -e "$body" | mail -s "$subject" "$recipient"
+fi
